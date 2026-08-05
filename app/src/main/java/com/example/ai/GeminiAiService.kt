@@ -36,7 +36,8 @@ class GeminiAiService(private val context: Context) {
     suspend fun generateResponse(
         prompt: String,
         bitmap: Bitmap? = null,
-        history: List<Pair<String, String>> = emptyList()
+        history: List<Pair<String, String>> = emptyList(),
+        memoryContext: String = ""
     ): String = withContext(Dispatchers.IO) {
         val apiKey = BuildConfig.GEMINI_API_KEY
         if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
@@ -81,9 +82,10 @@ class GeminiAiService(private val context: Context) {
             contentsArray.put(currentContent)
             rootJson.put("contents", contentsArray)
 
-            // System Instruction
+            // System Instruction with Injected Long-Term Memory Context
+            val effectiveInstruction = systemInstructionText + memoryContext
             val sysInstruction = JSONObject().apply {
-                put("parts", JSONArray().put(JSONObject().put("text", systemInstructionText)))
+                put("parts", JSONArray().put(JSONObject().put("text", effectiveInstruction)))
             }
             rootJson.put("systemInstruction", sysInstruction)
 
@@ -108,7 +110,8 @@ class GeminiAiService(private val context: Context) {
 
     fun streamResponse(
         prompt: String,
-        history: List<Pair<String, String>> = emptyList()
+        history: List<Pair<String, String>> = emptyList(),
+        memoryContext: String = ""
     ): Flow<String> = flow {
         val apiKey = BuildConfig.GEMINI_API_KEY
         if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
@@ -137,8 +140,9 @@ class GeminiAiService(private val context: Context) {
             })
 
             rootJson.put("contents", contentsArray)
+            val effectiveInstruction = systemInstructionText + memoryContext
             rootJson.put("systemInstruction", JSONObject().apply {
-                put("parts", JSONArray().put(JSONObject().put("text", systemInstructionText)))
+                put("parts", JSONArray().put(JSONObject().put("text", effectiveInstruction)))
             })
 
             val mediaType = "application/json; charset=utf-8".toMediaType()

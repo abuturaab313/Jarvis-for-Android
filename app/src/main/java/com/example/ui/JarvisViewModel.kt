@@ -8,6 +8,7 @@ import com.example.ai.GeminiAiService
 import com.example.automation.AutomationEngine
 import com.example.database.AppDatabase
 import com.example.database.JarvisRepository
+import com.example.memory.*
 import com.example.mobile.MobileSkillsManager
 import com.example.models.*
 import com.example.utils.SystemMonitor
@@ -24,6 +25,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     private val db = AppDatabase.getDatabase(application)
     val repository = JarvisRepository(db)
+    val memoryRepository = MemoryRepository(db.memoryDao())
+    val memoryManager = MemoryManager(memoryRepository)
     val aiService = GeminiAiService(application)
     val voiceEngine = VoiceEngine(application)
     val skillsManager = MobileSkillsManager(application)
@@ -33,6 +36,10 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     // Navigation & Screen State
     private val _currentScreen = MutableStateFlow(NavigationScreen.SPLASH)
     val currentScreen: StateFlow<NavigationScreen> = _currentScreen
+
+    // Long-Term Memories Flow
+    val memories: StateFlow<List<MemoryEntity>> = memoryManager.allMemories
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // System Metrics
     val systemMetrics: StateFlow<SystemMetrics> = systemMonitor.getMetricsFlow()
@@ -128,9 +135,13 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 (if (it.sender == Sender.USER) "User: " else "JARVIS: ") to it.content
             }
 
-            _streamingText.value = "JARVIS Core Analyzing..."
+            // Step 1: Long-term memory retrieval for input prompt
+            val memoryContext = memoryManager.prepareContext(text)
 
-            aiService.streamResponse(prompt = text, history = historyPairs).collect { chunk ->
+            _streamingText.value = "JARVIS Core Retrieving Memories & Analyzing..."
+
+            // Step 2: Generate response with injected memory context
+            aiService.streamResponse(prompt = text, history = historyPairs, memoryContext = memoryContext).collect { chunk ->
                 _streamingText.value = chunk
             }
 
@@ -139,6 +150,9 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             repository.sendChatMessage(
                 ChatMessage(sender = Sender.JARVIS, content = finalReply)
             )
+
+            // Step 3: Score and store important new long-term memories
+            memoryManager.processPostResponse(userPrompt = text, aiResponse = finalReply)
 
             _streamingText.value = ""
             _isAiProcessing.value = false
@@ -214,6 +228,24 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearChatHistory() {
         viewModelScope.launch(Dispatchers.IO) { repository.clearChatHistory() }
+    }
+
+    fun addMemory(content: String, category: String = "USER_PREFERENCE", importanceScore: Float = 0.8f) {
+        viewModelScope.launch(Dispatchers.IO) {
+            memoryManager.addMemory(content = content, category = category, importanceScore = importanceScore)
+        }
+    }
+
+    fun deleteMemory(memory: MemoryEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            memoryManager.deleteMemory(memory)
+        }
+    }
+
+    fun clearAllMemories() {
+        viewModelScope.launch(Dispatchers.IO) {
+            memoryManager.clearAllMemories()
+        }
     }
 
     override fun onCleared() {

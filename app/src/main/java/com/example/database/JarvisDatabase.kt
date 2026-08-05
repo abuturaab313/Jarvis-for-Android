@@ -3,6 +3,8 @@ package com.example.database
 import android.content.Context
 import androidx.room.*
 import com.example.models.*
+import com.example.memory.MemoryEntity
+import com.example.memory.MemoryDao
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -80,8 +82,8 @@ class Converters {
 }
 
 @Database(
-    entities = [ChatMessage::class, Routine::class, TaskItem::class, SystemAnalyticsLog::class],
-    version = 1,
+    entities = [ChatMessage::class, Routine::class, TaskItem::class, SystemAnalyticsLog::class, MemoryEntity::class],
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -90,6 +92,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun routineDao(): RoutineDao
     abstract fun taskDao(): TaskDao
     abstract fun analyticsDao(): AnalyticsDao
+    abstract fun memoryDao(): MemoryDao
 
     companion object {
         @Volatile
