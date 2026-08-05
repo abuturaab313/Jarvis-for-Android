@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.util.Base64
 import com.example.BuildConfig
+import com.example.memory.MemoryManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -18,7 +19,10 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 
-class GeminiAiService(private val context: Context) {
+class GeminiAiService(
+    private val context: Context,
+    var memoryManager: MemoryManager? = null
+) {
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
@@ -45,6 +49,14 @@ class GeminiAiService(private val context: Context) {
         }
 
         try {
+            // Retrieve memories via MemoryManager if available
+            val retrievedMemories = memoryManager?.prepareContext(prompt) ?: ""
+            val effectivePrompt = if (retrievedMemories.isNotBlank()) {
+                "$retrievedMemories\n\n$prompt"
+            } else {
+                prompt
+            }
+
             val rootJson = JSONObject()
             val contentsArray = JSONArray()
 
@@ -64,7 +76,7 @@ class GeminiAiService(private val context: Context) {
 
             // Current user prompt parts
             val currentParts = JSONArray()
-            currentParts.put(JSONObject().put("text", prompt))
+            currentParts.put(JSONObject().put("text", effectivePrompt))
 
             if (bitmap != null) {
                 val base64Image = bitmap.toBase64String()
@@ -102,7 +114,11 @@ class GeminiAiService(private val context: Context) {
                 return@withContext "JARVIS System Error [HTTP ${response.code}]: Unable to reach neural network. ${response.message}"
             }
 
-            extractTextFromResponse(respBodyStr)
+            val aiResult = extractTextFromResponse(respBodyStr)
+            if (aiResult.isNotEmpty() && !aiResult.startsWith("JARVIS System Error")) {
+                memoryManager?.processPostResponse(userPrompt = prompt, aiResponse = aiResult)
+            }
+            aiResult
         } catch (e: Exception) {
             "JARVIS Core Exception: ${e.localizedMessage ?: "Connection failure"}. Standing by for retry."
         }
@@ -120,6 +136,14 @@ class GeminiAiService(private val context: Context) {
         }
 
         try {
+            // Retrieve memories via MemoryManager if available
+            val retrievedMemories = memoryManager?.prepareContext(prompt) ?: ""
+            val effectivePrompt = if (retrievedMemories.isNotBlank()) {
+                "$retrievedMemories\n\n$prompt"
+            } else {
+                prompt
+            }
+
             val rootJson = JSONObject()
             val contentsArray = JSONArray()
 
@@ -136,7 +160,7 @@ class GeminiAiService(private val context: Context) {
 
             contentsArray.put(JSONObject().apply {
                 put("role", "user")
-                put("parts", JSONArray().put(JSONObject().put("text", prompt)))
+                put("parts", JSONArray().put(JSONObject().put("text", effectivePrompt)))
             })
 
             rootJson.put("contents", contentsArray)
@@ -171,7 +195,10 @@ class GeminiAiService(private val context: Context) {
 
             if (accumulatedText.isEmpty()) {
                 val fallback = generateResponse(prompt = prompt, history = history, memoryContext = memoryContext)
+                accumulatedText = fallback
                 emit(fallback)
+            } else {
+                memoryManager?.processPostResponse(userPrompt = prompt, aiResponse = accumulatedText)
             }
         } catch (e: Exception) {
             emit("JARVIS Stream Error: ${e.localizedMessage}")
