@@ -170,7 +170,7 @@ class GeminiAiService(private val context: Context) {
             }
 
             if (accumulatedText.isEmpty()) {
-                val fallback = generateResponse(prompt = prompt, history = history)
+                val fallback = generateResponse(prompt = prompt, history = history, memoryContext = memoryContext)
                 emit(fallback)
             }
         } catch (e: Exception) {
