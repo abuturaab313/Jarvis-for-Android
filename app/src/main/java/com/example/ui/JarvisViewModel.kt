@@ -128,62 +128,83 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private var lastSentText: String = ""
+    private var lastSentTime: Long = 0L
+
     fun navigateTo(screen: NavigationScreen) {
         _currentScreen.value = screen
     }
 
     fun sendUserMessage(text: String, imageBitmap: Bitmap? = null) {
-        if (text.isBlank() && imageBitmap == null) return
+        val cleanText = text.trim()
+        if (cleanText.isBlank() && imageBitmap == null) return
+
+        val now = System.currentTimeMillis()
+        if (cleanText == lastSentText && (now - lastSentTime) < 2000L) {
+            android.util.Log.d("JarvisViewModel", "Ignoring duplicate rapid message: $cleanText")
+            return
+        }
+        lastSentText = cleanText
+        lastSentTime = now
 
         viewModelScope.launch(Dispatchers.IO) {
             _isAiProcessing.value = true
 
-            // Save user message
-            repository.sendChatMessage(
-                ChatMessage(sender = Sender.USER, content = text)
-            )
-
-            // Check if user is asking for a mobile skill action (e.g., "flashlight", "wifi", "call")
-            val skillResponse = handleSkillCommandsIfMatch(text)
-            if (skillResponse != null) {
+            try {
+                // Save user message
                 repository.sendChatMessage(
-                    ChatMessage(sender = Sender.JARVIS, content = skillResponse)
+                    ChatMessage(sender = Sender.USER, content = cleanText)
                 )
-                voiceEngine.speak(skillResponse)
+
+                // Check if user is asking for a mobile skill action (e.g., "flashlight", "wifi", "call")
+                val skillResponse = handleSkillCommandsIfMatch(cleanText)
+                if (skillResponse != null) {
+                    repository.sendChatMessage(
+                        ChatMessage(sender = Sender.JARVIS, content = skillResponse)
+                    )
+                    voiceEngine.speak(skillResponse)
+                    return@launch
+                }
+
+                // Otherwise, route through Gemini Neural AI Engine
+                val historyPairs = chatMessages.value.map {
+                    (if (it.sender == Sender.USER) "User: " else "JARVIS: ") to it.content
+                }
+
+                // Step 1: Long-term memory retrieval for input prompt
+                val memoryContext = memoryManager.prepareContext(cleanText)
+
+                _streamingText.value = "JARVIS Core Retrieving Memories & Analyzing..."
+
+                // Step 2: Generate response with injected memory context
+                aiService.streamResponse(prompt = cleanText, history = historyPairs, memoryContext = memoryContext).collect { chunk ->
+                    _streamingText.value = chunk
+                }
+
+                val finalReply = _streamingText.value.ifEmpty { "JARVIS Core standing by. Request processed." }
+
+                repository.sendChatMessage(
+                    ChatMessage(sender = Sender.JARVIS, content = finalReply)
+                )
+
+                // Step 3: Score and store important new long-term memories
+                memoryManager.processPostResponse(userPrompt = cleanText, aiResponse = finalReply)
+
+                _streamingText.value = ""
+
+                // Speak response if voice active or screen is VOICE
+                if (voiceEngine.isListening.value || currentScreen.value == NavigationScreen.VOICE) {
+                    voiceEngine.speak(finalReply)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("JarvisViewModel", "Error in sendUserMessage", e)
+                val errorMsg = "JARVIS Notice: Request interrupted. (${e.localizedMessage ?: "Unknown error"})"
+                repository.sendChatMessage(
+                    ChatMessage(sender = Sender.JARVIS, content = errorMsg)
+                )
+                voiceEngine.speak("JARVIS notice: Request interrupted. Standing by.")
+            } finally {
                 _isAiProcessing.value = false
-                return@launch
-            }
-
-            // Otherwise, route through Gemini Neural AI Engine
-            val historyPairs = chatMessages.value.map {
-                (if (it.sender == Sender.USER) "User: " else "JARVIS: ") to it.content
-            }
-
-            // Step 1: Long-term memory retrieval for input prompt
-            val memoryContext = memoryManager.prepareContext(text)
-
-            _streamingText.value = "JARVIS Core Retrieving Memories & Analyzing..."
-
-            // Step 2: Generate response with injected memory context
-            aiService.streamResponse(prompt = text, history = historyPairs, memoryContext = memoryContext).collect { chunk ->
-                _streamingText.value = chunk
-            }
-
-            val finalReply = _streamingText.value.ifEmpty { "JARVIS Core standing by. Request processed." }
-
-            repository.sendChatMessage(
-                ChatMessage(sender = Sender.JARVIS, content = finalReply)
-            )
-
-            // Step 3: Score and store important new long-term memories
-            memoryManager.processPostResponse(userPrompt = text, aiResponse = finalReply)
-
-            _streamingText.value = ""
-            _isAiProcessing.value = false
-
-            // Speak response if voice active or screen is VOICE
-            if (voiceEngine.isListening.value || currentScreen.value == NavigationScreen.VOICE) {
-                voiceEngine.speak(finalReply)
             }
         }
     }
