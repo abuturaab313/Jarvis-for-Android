@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.util.Base64
 import com.example.BuildConfig
 import com.example.memory.MemoryManager
+import com.example.utils.ApiKeyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -24,6 +25,8 @@ class GeminiAiService(
     var memoryManager: MemoryManager? = null
 ) {
 
+    val apiKeyManager = ApiKeyManager(context)
+
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
@@ -37,15 +40,57 @@ class GeminiAiService(
         When answering questions, provide precise, structured responses with markdown formatting or code snippets when helpful.
     """.trimIndent()
 
+    suspend fun validateApiKey(testKey: String): Result<String> = withContext(Dispatchers.IO) {
+        val keyToTest = testKey.trim()
+        if (keyToTest.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("API Key cannot be blank"))
+        }
+
+        try {
+            val rootJson = JSONObject().apply {
+                val contentsArray = JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("parts", JSONArray().put(JSONObject().put("text", "Ping")))
+                    })
+                }
+                put("contents", contentsArray)
+            }
+
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val request = Request.Builder()
+                .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$keyToTest")
+                .post(rootJson.toString().toRequestBody(mediaType))
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val respBodyStr = response.body?.string() ?: ""
+
+            if (response.isSuccessful) {
+                Result.success("Gemini API Key Verified Successfully")
+            } else {
+                val errorMsg = try {
+                    JSONObject(respBodyStr).optJSONObject("error")?.optString("message")
+                        ?: "HTTP ${response.code}: ${response.message}"
+                } catch (e: Exception) {
+                    "HTTP ${response.code}: ${response.message}"
+                }
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception(e.localizedMessage ?: "Connection failure during key validation"))
+        }
+    }
+
     suspend fun generateResponse(
         prompt: String,
         bitmap: Bitmap? = null,
         history: List<Pair<String, String>> = emptyList(),
         memoryContext: String = ""
     ): String = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-            return@withContext "JARVIS Core Alert: Gemini API key is not configured in Secrets panel. Please set GEMINI_API_KEY to enable neural speech and response engine."
+        val apiKey = apiKeyManager.getApiKey()
+        if (apiKey.isEmpty()) {
+            return@withContext "JARVIS Core Alert: Gemini API Key is not configured. Please enter your key in Setup or Settings."
         }
 
         try {
@@ -129,9 +174,9 @@ class GeminiAiService(
         history: List<Pair<String, String>> = emptyList(),
         memoryContext: String = ""
     ): Flow<String> = flow {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-            emit("JARVIS Core Alert: Gemini API Key required. Standby for user authentication.")
+        val apiKey = apiKeyManager.getApiKey()
+        if (apiKey.isEmpty()) {
+            emit("JARVIS Core Alert: Gemini API Key is not configured. Please enter your key in Setup or Settings.")
             return@flow
         }
 

@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -77,6 +78,149 @@ fun SettingsScreen(viewModel: JarvisViewModel) {
             }
 
             Spacer(modifier = Modifier.height(20.dp))
+
+            // Gemini API Key Management Card
+            var settingsKeyInput by remember { mutableStateOf("") }
+            var isUpdatingKey by remember { mutableStateOf(false) }
+            var keyStatusMessage by remember { mutableStateOf<String?>(null) }
+            val hasKey = viewModel.hasApiKey()
+            val maskedKey = viewModel.getMaskedApiKey()
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassmorphic(cornerRadius = 16.dp)
+                    .padding(16.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.VpnKey, contentDescription = "API Key", tint = NeonCyan)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "GEMINI API KEY",
+                                color = NeonCyan,
+                                fontSize = 13.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (hasKey) GlowingGreen.copy(alpha = 0.15f) else AlertOrange.copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (hasKey) GlowingGreen else AlertOrange)
+                        ) {
+                            Text(
+                                text = if (hasKey) "ACTIVE" else "NOT SET",
+                                color = if (hasKey) GlowingGreen else AlertOrange,
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Current Key: $maskedKey",
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = settingsKeyInput,
+                        onValueChange = {
+                            settingsKeyInput = it
+                            keyStatusMessage = null
+                        },
+                        placeholder = { Text("Enter new Gemini API key", fontSize = 11.sp, color = TextMuted) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_settings_api_key")
+                    )
+
+                    keyStatusMessage?.let { msg ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = msg,
+                            color = if (msg.contains("Success", ignoreCase = true)) GlowingGreen else DangerRed,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (settingsKeyInput.isBlank()) {
+                                    keyStatusMessage = "Please enter a key"
+                                    return@Button
+                                }
+                                isUpdatingKey = true
+                                viewModel.validateAndSaveApiKey(
+                                    apiKey = settingsKeyInput.trim(),
+                                    onSuccess = {
+                                        isUpdatingKey = false
+                                        settingsKeyInput = ""
+                                        keyStatusMessage = "Key Validated & Saved Successfully!"
+                                        Toast.makeText(context, "API Key updated", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onError = { err ->
+                                        isUpdatingKey = false
+                                        keyStatusMessage = err
+                                    }
+                                )
+                            },
+                            enabled = !isUpdatingKey,
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = DeepSpaceBackground),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("btn_update_api_key")
+                        ) {
+                            Text(if (isUpdatingKey) "SAVING..." else "SAVE KEY", fontFamily = FontFamily.Monospace, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        if (hasKey) {
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.deleteApiKey()
+                                    settingsKeyInput = ""
+                                    keyStatusMessage = "API Key cleared from storage"
+                                    Toast.makeText(context, "API Key cleared", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, DangerRed),
+                                modifier = Modifier.testTag("btn_delete_api_key")
+                            ) {
+                                Text("CLEAR", fontFamily = FontFamily.Monospace, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Speech Synthesis Pitch & Rate Sliders
             Box(

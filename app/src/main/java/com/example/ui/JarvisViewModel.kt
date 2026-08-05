@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 enum class NavigationScreen {
-    SPLASH, HOME, CHAT, VOICE, VISION, SKILLS, ROUTINES, DASHBOARD, SECURITY, SETTINGS
+    SPLASH, API_KEY_SETUP, HOME, CHAT, VOICE, VISION, SKILLS, ROUTINES, DASHBOARD, SECURITY, SETTINGS
 }
 
 class JarvisViewModel(application: Application) : AndroidViewModel(application) {
@@ -32,6 +32,30 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     val skillsManager = MobileSkillsManager(application)
     val systemMonitor = SystemMonitor(application)
     val automationEngine = AutomationEngine(application, repository, skillsManager, systemMonitor)
+
+    // API Key Management
+    fun hasApiKey(): Boolean = aiService.apiKeyManager.hasApiKey()
+    fun getApiKey(): String = aiService.apiKeyManager.getApiKey()
+    fun getMaskedApiKey(): String = aiService.apiKeyManager.getMaskedApiKey()
+
+    fun validateAndSaveApiKey(apiKey: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = aiService.validateApiKey(apiKey)
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                if (result.isSuccess) {
+                    aiService.apiKeyManager.saveApiKey(apiKey)
+                    onSuccess()
+                } else {
+                    val err = result.exceptionOrNull()?.localizedMessage ?: "Invalid API Key"
+                    onError(err)
+                }
+            }
+        }
+    }
+
+    fun deleteApiKey() {
+        aiService.apiKeyManager.clearApiKey()
+    }
 
     // Navigation & Screen State
     private val _currentScreen = MutableStateFlow(NavigationScreen.SPLASH)

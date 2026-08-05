@@ -44,6 +44,16 @@ class MainActivity : ComponentActivity() {
                             when (screen) {
                                 NavigationScreen.SPLASH -> SplashScreen(
                                     onBootComplete = {
+                                        if (!viewModel.hasApiKey()) {
+                                            viewModel.navigateTo(NavigationScreen.API_KEY_SETUP)
+                                        } else {
+                                            viewModel.navigateTo(NavigationScreen.HOME)
+                                        }
+                                    }
+                                )
+                                NavigationScreen.API_KEY_SETUP -> ApiKeySetupScreen(
+                                    viewModel = viewModel,
+                                    onSetupComplete = {
                                         viewModel.navigateTo(NavigationScreen.HOME)
                                     }
                                 )
@@ -62,8 +72,8 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
-                        // Floating HUD Navigation Bar shown when not on Splash screen
-                        if (currentScreen != NavigationScreen.SPLASH) {
+                        // Floating HUD Navigation Bar shown when not on Splash or API Key Setup screens
+                        if (currentScreen != NavigationScreen.SPLASH && currentScreen != NavigationScreen.API_KEY_SETUP) {
                             Box(
                                 modifier = Modifier.align(Alignment.BottomCenter)
                             ) {
