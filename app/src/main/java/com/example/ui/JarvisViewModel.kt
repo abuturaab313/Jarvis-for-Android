@@ -188,7 +188,8 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch(Dispatchers.IO) {
             _isAiProcessing.value = true
             val prompt = "Analyze this image thoroughly in high-tech JARVIS HUD style. Identify key objects, text, OCR data, and provide an actionable AI summary."
-            val response = aiService.generateResponse(prompt, bitmap)
+            val memoryContext = memoryManager.prepareContext("vision camera image analysis")
+            val response = aiService.generateResponse(prompt, bitmap, memoryContext = memoryContext)
 
             _visionResult.value = VisionAnalysisResult(
                 timestamp = System.currentTimeMillis(),
@@ -196,6 +197,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 labels = listOf("HUD Target Acquired", "High Confidence Match", "Neural Matrix Ready"),
                 summary = response
             )
+            memoryManager.processPostResponse(userPrompt = "Vision camera scan analysis", aiResponse = response)
             _isAiProcessing.value = false
         }
     }

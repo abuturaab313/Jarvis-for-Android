@@ -110,7 +110,140 @@ fun SettingsScreen(viewModel: JarvisViewModel) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Offline Mode Toggle
+            // Long-Term Memory Vault Section
+            val memories by viewModel.memories.collectAsState()
+            var newMemoryText by remember { mutableStateOf("") }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassmorphic(cornerRadius = 16.dp)
+                    .padding(16.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.Psychology, contentDescription = "Memory Vault", tint = NeonCyan)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "LONG-TERM MEMORY VAULT (${memories.size})",
+                                color = NeonCyan,
+                                fontSize = 13.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        if (memories.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.clearAllMemories() }) {
+                                Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = "Clear All Memories", tint = DangerRed)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = newMemoryText,
+                            onValueChange = { newMemoryText = it },
+                            placeholder = { Text("e.g., Boss prefers dark mode & coffee", fontSize = 11.sp, color = TextMuted) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = GlassBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("input_new_memory")
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (newMemoryText.isNotBlank()) {
+                                    viewModel.addMemory(newMemoryText)
+                                    newMemoryText = ""
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = DeepSpaceBackground),
+                            modifier = Modifier.testTag("btn_save_memory")
+                        ) {
+                            Text("SAVE", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (memories.isEmpty()) {
+                        Text(
+                            text = "No long-term memories indexed yet. Chat naturally or save a fact above to populate JARVIS memory.",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            memories.take(6).forEach { mem ->
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = DarkGlassSurface),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = mem.content,
+                                                color = TextPrimary,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Text(
+                                                    text = "CAT: ${mem.category}",
+                                                    color = GlowingGreen,
+                                                    fontSize = 9.sp,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
+                                                Text(
+                                                    text = "WEIGHT: ${(mem.importanceScore * 100).toInt()}%",
+                                                    color = NeonCyan,
+                                                    fontSize = 9.sp,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
+                                            }
+                                        }
+                                        IconButton(
+                                            onClick = { viewModel.deleteMemory(mem) },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Delete Memory",
+                                                tint = TextMuted,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
